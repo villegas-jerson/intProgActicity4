@@ -15,7 +15,7 @@
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
-    "expess": "^0.0.1-security",
+    "express": "^4.18.2",
     "jsonwebtoken": "^9.0.3"
   },
   "devDependencies": {
