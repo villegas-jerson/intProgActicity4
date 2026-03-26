@@ -8,7 +8,6 @@ function loadFromStorage() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) { window.db = JSON.parse(raw); return; }
   } catch(e) {}
-  // Seed default data
   window.db = {
     accounts: [
       { id: uid(), firstName: 'Main', lastName: 'Admin', email: 'admin@example.com', password: 'Password123!', role: 'admin', verified: true }
@@ -53,10 +52,10 @@ function setAuthState(isAuth, user = null) {
   }
 }
 
-// CHANGED: also clears sessionStorage authToken (real JWT)
 function doLogout() {
   localStorage.removeItem('auth_token');
   sessionStorage.removeItem('authToken');
+  sessionStorage.removeItem('lastEmail');
   setAuthState(false);
   showToast('Logged out successfully.', 'info');
   navigateTo('#/');
@@ -94,7 +93,6 @@ function handleRouting() {
     navigateTo('#/'); return;
   }
 
-  // Force-hide all pages with inline style to beat any CSS specificity issues
   document.querySelectorAll('.page').forEach(p => {
     p.classList.remove('active');
     p.style.display = 'none';
@@ -120,12 +118,10 @@ userPill.addEventListener('click', (e) => {
   dropPanel.classList.toggle('open');
 });
 
-// Close dropdown when any dd-item is clicked
 dropPanel.querySelectorAll('.dd-item').forEach(item => {
   item.addEventListener('click', () => dropPanel.classList.remove('open'));
 });
 
-// Close dropdown when clicking anywhere else on the page
 document.addEventListener('click', () => dropPanel.classList.remove('open'));
 
 // ═══════════════════════════════════════════════════════
@@ -189,7 +185,7 @@ document.getElementById('verifyBtn').addEventListener('click', () => {
 });
 
 // ═══════════════════════════════════════════════════════
-//  LOGIN  ← CHANGED: now calls the real backend API
+//  LOGIN — calls real backend API
 // ═══════════════════════════════════════════════════════
 document.getElementById('loginSubmitBtn').addEventListener('click', async () => {
   const em = document.getElementById('log-em').value.trim().toLowerCase();
@@ -203,17 +199,17 @@ document.getElementById('loginSubmitBtn').addEventListener('click', async () => 
     const response = await fetch('http://localhost:3000/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: em, password: pw })
+      // FIXED: was { username: em } — backend now expects { email }
+      body: JSON.stringify({ email: em, password: pw })
     });
 
     const data = await response.json();
 
     if (response.ok) {
-      // Save the real JWT token from the backend
       sessionStorage.setItem('authToken', data.token);
-      // Look up local db for full user info (firstName, lastName, etc.)
+      sessionStorage.setItem('lastEmail', em);
       const acc = window.db.accounts.find(a => a.email === em);
-      setAuthState(true, acc || { firstName: data.user.username, email: em, role: data.user.role });
+      setAuthState(true, acc || { firstName: data.user.email.split('@')[0], email: em, role: data.user.role });
       showToast(`Welcome back!`, 'success');
       setTimeout(() => navigateTo('#/profile'), 50);
     } else {
@@ -268,16 +264,13 @@ function saveProfileEdit() {
   if (pw && pw.length < 6) { setFieldErr('f-edit-prof-pw', true, 'Min 6 characters'); return; }
   setFieldErr('f-edit-prof-pw', false);
 
-  // Update in db
   const acc = window.db.accounts.find(a => a.id === currentUser.id);
   if (acc) {
     acc.firstName = fn;
     acc.lastName  = ln;
     if (pw) acc.password = pw;
     saveToStorage();
-    // Refresh currentUser reference
     currentUser = acc;
-    // Update navbar name
     document.getElementById('navName').textContent = fn;
   }
 
@@ -404,12 +397,12 @@ function openAccountModal(id = null) {
   if (id) {
     const a = window.db.accounts.find(x => x.id === id);
     if (a) {
-      document.getElementById('acc-fn').value        = a.firstName;
-      document.getElementById('acc-ln').value        = a.lastName;
-      document.getElementById('acc-em').value        = a.email;
-      document.getElementById('acc-role').value      = a.role;
+      document.getElementById('acc-fn').value         = a.firstName;
+      document.getElementById('acc-ln').value         = a.lastName;
+      document.getElementById('acc-em').value         = a.email;
+      document.getElementById('acc-role').value       = a.role;
       document.getElementById('acc-verified').checked = a.verified;
-      document.getElementById('acc-edit-id').value   = a.id;
+      document.getElementById('acc-edit-id').value    = a.id;
     }
   }
   openModal('modal-account');
@@ -627,11 +620,9 @@ function showToast(msg, type = 'info') {
 // ═══════════════════════════════════════════════════════
 loadFromStorage();
 
-// CHANGED: Restore session from sessionStorage (real JWT) instead of fake localStorage token
+// Restore session from sessionStorage
 const savedToken = sessionStorage.getItem('authToken');
 if (savedToken) {
-  // Token exists — keep the user logged in for this session
-  // In a real app you'd validate this token with the backend
   const lastEmail = sessionStorage.getItem('lastEmail');
   if (lastEmail) {
     const acc = window.db.accounts.find(a => a.email === lastEmail);
